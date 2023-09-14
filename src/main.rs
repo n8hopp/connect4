@@ -1,5 +1,5 @@
 
-use std::io::{stdin,stdout, Write};
+use std::io::{stdin,stdout, Write, empty};
 use std::error::Error;
 use std::fmt::{Display,Formatter};
 use std::fmt;
@@ -121,9 +121,6 @@ fn test_board() -> Board
 ///  * print the result
 fn main()
 {
-    //use this to test out your print function
-    print_board(&test_board());
-
     let mut board = new_board();
     match run_game(&mut board)
     {
@@ -149,24 +146,31 @@ fn main()
 fn run_game(board : &mut Board) -> Piece
 {
     let mut turn = 0;
-    let mut winner = check_winner(board);
+    let mut winner : Option<Piece> = None;
     // Pert 2: write the code for running the game.
 
     // while there's no winner returned by check_winner
-    while let None = winner {
+    while let None = winner 
+    {
         if turn == 0
         {
             println!("Red's turn...");
+            println!("Here's the board!");
+            print_board(board);
+
             human_turn(board, R);
         }
         else if turn == 1
         {
             println!("Black's turn...");
+            println!("Here's the board!");
+            print_board(board);
+
             human_turn(board, B);
         }
 
         // increment turn by 1 mod 2: 0 == p1 turn, 1 == p2 turn
-        turn += 1 % 2;
+        turn = (turn + 1) % 2;
 
         // update our iteration condition variable with the winner check
         winner = check_winner(board);
@@ -186,14 +190,75 @@ fn run_game(board : &mut Board) -> Piece
 /// and return if there was a winner.
 fn human_turn(board : &mut Board, piece : Piece) -> Option<Piece>
 {
-    if let Ok(x) = try_move() {
+    let mut tries_left = 5;
+    // as long as make_move is returning errors, keep prompting
+    while let Err(x) = make_move(board, piece)
+    {
+        // handling for an indecisive / stupid player
+        tries_left -= 1;
+        if tries_left <= 0 
+        {
+            println!("You have run out of tries! Due to your indecision, your turn will be skipped."); 
+            break;
+        }
         
+        // print error passed up by function stack
+        println!("{}", x); 
+
+        println!("You have {} tries left to make your move. If you run out, your turn will be skipped.", tries_left);
     }
 
-    //Part 3: write code for a human playrs turn.
+    // return piece placed
     return Some(piece);
 }
 
+fn make_move(board : &mut Board, piece : Piece) -> Result<Piece, GameError>
+{
+    // prompt to take user input for move 
+    // (and ensure column value is correct)
+    let column = match try_move() 
+    {
+        Ok(m) => m,
+        Err(e) => {return Err(e);}
+    };
+
+    // get lowest row in col
+    // and update board
+    match check_full(board, column) {
+        Ok(row) => 
+        {   
+            board[row][column] = piece;
+            return Ok(piece);
+        }
+        Err(e) => 
+        {
+            return Err(e);
+        }
+    }
+}
+
+// check to see if col is full.
+// if not, return lowest row in selected column
+fn check_full(board : &mut Board, column : Move) -> Result<usize, GameError>
+{
+    // gravity mechanic - finds first slot at bottom of column and updates board. 
+    // If none exists, we return none.
+    let mut i : usize = 6;
+    while i > 0
+    {
+        if board[i-1][column] != E 
+        {
+            i -= 1;
+            continue;
+        }
+        else 
+        {
+            return Ok(i-1);
+        }
+        
+    }
+    return Err(game_error("Column must not be full."));
+}
 
 /// check to see if there's a winner
 /// If there is a winner, then return that player's piece.
@@ -212,9 +277,98 @@ fn check_winner(board : &Board) -> Option<Piece>
     //
     //If there's no winner yet return None
     //
+    
+    let rows = 6;
+    let cols = 7;
+    let mut empty_found = false;
+    // Vertical Check
+    for col in 0..cols 
+    {
+        for row in 0..rows-3 
+        {
+            if board[row][col] == E
+            {
+                empty_found = true;
+                continue;
+            }
+
+            if board[row][col] == board[row+1][col] 
+            && board[row][col] == board[row+2][col] 
+            && board[row][col] == board[row+3][col] 
+            {
+                return Some(board[row][col]);
+            }
+        }
+    }
+
+    // Horizontal check
+    for row in 0..rows
+    {
+        for col in 0..cols-3
+        {
+            if board[row][col] == E
+            {
+                empty_found = true;
+                continue;
+            }
+
+            if board[row][col] == board[row][col+1] 
+            && board[row][col] == board[row][col+2] 
+            && board[row][col] == board[row][col+3] 
+            {
+                return Some(board[row][col]);
+            }
+        }
+    }
+
+    // bottom-up diagonal
+    for row in 0..rows-3
+    {
+        for col in 0..cols-3
+        {
+            if board[row][col] == E
+            {
+                empty_found = true;
+                continue;
+            }
+
+            if board[row][col] == board[row+1][col+1] 
+            && board[row][col] == board[row+2][col+2] 
+            && board[row][col] == board[row+3][col+3] 
+            {
+                return Some(board[row][col]);
+            }
+        }
+    }
+
+    // top-down diagonal
+    for row in 3..rows
+    {
+        for col in 0..cols-3
+        {
+            if board[row][col] == E
+            {
+                empty_found = true;
+                continue;
+            }
+
+            if board[row][col] == board[row-1][col+1] 
+            && board[row][col] == board[row-2][col+2] 
+            && board[row][col] == board[row-3][col+3] 
+            {
+                return Some(board[row][col]);
+            }
+        }
+    }
+
+    if empty_found == false
+    {
+        // no empties found on board - all slots filled! Draw!
+        return Some(E);
+    }
+
     return None;
 }
-
 
 /////////////////////////////////////////////
 //
