@@ -1,11 +1,12 @@
 
-use std::io::{stdin,stdout, Write, empty};
+use std::io::{stdin,stdout, Write};
 use std::error::Error;
 use std::fmt::{Display,Formatter};
 use std::fmt;
+use rand::Rng;
 
 #[macro_use] extern crate prettytable;
-use prettytable::{Table, Row, Cell};
+use prettytable::Table;
 
 /////////////////////////////////////////////
 //
@@ -98,15 +99,15 @@ fn new_board() -> Board
 ///   |-+-+-+-+-+-+-|
 /// F |R|B|R|B|R|B|R|
 ///   +-------------+
-fn test_board() -> Board
-{
-    vec![vec![E, E, E, E, E, E, E],
-         vec![E, E, E, E, E, E, E],
-         vec![B, R, B, R, B, R, B],
-         vec![B, R, B, R, B, R, B],
-         vec![R, B, R, B, R, B, R],
-         vec![R, B, R, B, R, B, R]]
-}
+// fn test_board() -> Board
+// {
+//     vec![vec![E, E, E, E, E, E, E],
+//          vec![E, E, E, E, E, E, E],
+//          vec![B, R, B, R, B, R, B],
+//          vec![B, R, B, R, B, R, B],
+//          vec![R, B, R, B, R, B, R],
+//          vec![R, B, R, B, R, B, R]]
+// }
 
 
 /////////////////////////////////////////////
@@ -152,6 +153,7 @@ fn run_game(board : &mut Board) -> Piece
     // while there's no winner returned by check_winner
     while let None = winner 
     {
+        // turn == 0 - Red's turn
         if turn == 0
         {
             println!("Red's turn...");
@@ -160,7 +162,7 @@ fn run_game(board : &mut Board) -> Piece
 
             human_turn(board, R);
         }
-        else if turn == 1
+        else if turn == 1 // turn == 1 - black's turn
         {
             println!("Black's turn...");
             println!("Here's the board!");
@@ -176,7 +178,8 @@ fn run_game(board : &mut Board) -> Piece
         winner = check_winner(board);
     }
 
-    // if we got to this point, winner == Some, so we should be safe to unwrap and return the player that won's piece
+    // if we got to this point, winner == Some, so we should be safe 
+    // to unwrap and return the player that won's piece
     return winner.unwrap();
 }
 
@@ -198,20 +201,25 @@ fn human_turn(board : &mut Board, piece : Piece) -> Option<Piece>
         tries_left -= 1;
         if tries_left <= 0 
         {
-            println!("You have run out of tries! Due to your indecision, your turn will be skipped."); 
-            break;
+            println!("You have run out of tries! Due to your indecision, your turn will be auto-played."); 
+            auto_play(board, piece);
+            return Some(piece);
         }
         
         // print error passed up by function stack
         println!("{}", x); 
 
-        println!("You have {} tries left to make your move. If you run out, your turn will be skipped.", tries_left);
+        println!("You have {} tries left to make your move. If you run out, your turn will be auto-played.", tries_left);
     }
 
     // return piece placed
     return Some(piece);
 }
 
+// Function that initiates player move
+// Calls try_move() to prompt user (& insure valid column selection)
+// then uses return value from that to check if selected row was full
+// if not, update board with piece and return color that was placed
 fn make_move(board : &mut Board, piece : Piece) -> Result<Piece, GameError>
 {
     // prompt to take user input for move 
@@ -233,6 +241,36 @@ fn make_move(board : &mut Board, piece : Piece) -> Result<Piece, GameError>
         Err(e) => 
         {
             return Err(e);
+        }
+    }
+}
+
+// auto play function for when user uses up all tries to move
+// this is to prevent an obstinate/stupid player blocking flow of the game
+// just randomly selects a columm until one is a valid play, then breaks
+// 
+// this loop has to eventually select a correct move,
+// since we wouldn't have gotten to this point if previous check_winner call
+// didn't return Some()
+fn auto_play(board : &mut Board, piece : Piece) {
+    loop 
+    {
+        let num = rand::thread_rng().gen_range(0..6);
+        match check_full(board, num) {
+            Ok(row) =>
+            {
+                board[row][num] = piece;
+                break;
+            }
+            Err(_) =>
+            {
+                // don't give an invalid move warning for the rng play - 
+                // great way to confuse the player.
+                // check_winner would have run before this and stopped the 
+                // next turn if there was no space to play, so
+                // this loop has to eventually select a correct move :)
+                continue;
+            }
         }
     }
 }
@@ -269,21 +307,16 @@ fn check_full(board : &mut Board, column : Move) -> Result<usize, GameError>
 ///
 /// * board - the state of the board
 fn check_winner(board : &Board) -> Option<Piece>
-{
-    //Part 4: check to see if the board has a winner.
-    //If there is a winner return Some(Piece).
-    //
-    //If there's a draw return Some(E).
-    //
-    //If there's no winner yet return None
-    //
-    
+{   
     let rows = 6;
     let cols = 7;
     let mut empty_found = false;
+
     // Vertical Check
     for col in 0..cols 
     {
+        // we check from rows-3 because we're checking the last 
+        // 4 items in the column anyway through our check
         for row in 0..rows-3 
         {
             if board[row][col] == E
@@ -304,6 +337,8 @@ fn check_winner(board : &Board) -> Option<Piece>
     // Horizontal check
     for row in 0..rows
     {
+        // check from cols-3, checking last 4 items in row 
+        // already through booleans
         for col in 0..cols-3
         {
             if board[row][col] == E
@@ -342,6 +377,8 @@ fn check_winner(board : &Board) -> Option<Piece>
     }
 
     // top-down diagonal
+    // this one's a bit diff - we check from 3->rows instead of 0->rows-3
+    // since a winning diagonal can't exist in the top-left until row D
     for row in 3..rows
     {
         for col in 0..cols-3
@@ -361,6 +398,8 @@ fn check_winner(board : &Board) -> Option<Piece>
         }
     }
 
+    // check if we've found an empty - 
+    // if we have, there's still a space left to play, so no draw yet
     if empty_found == false
     {
         // no empties found on board - all slots filled! Draw!
